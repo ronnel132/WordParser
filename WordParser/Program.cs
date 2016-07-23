@@ -87,7 +87,7 @@ namespace WordParser
             {
                 if( p.IsHeaderSection && !fCollapse )
                 {
-                    CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, m_settings.HeaderDepth);
+                    CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, depth + 1);
                 }
                 else
                 {
