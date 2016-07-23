@@ -46,7 +46,7 @@ namespace WordParser
             PictureUtils.UnzipWordDocument(m_docPath, m_extractPath);
             // Seek to document title, call CreateHeaderSection( title, 0, 0 );
             DocumentIter iter = new DocumentIter(/* Word App */);
-            Paragraph titleParagraph = iter.SeekTitle();
+            ParagraphIter titleParagraph = iter.SeekTitle();
 
             var title = titleParagraph.GetText();
             m_document = CreateHeaderSection(iter, title, 0, 0);
@@ -66,13 +66,13 @@ namespace WordParser
 
             int currHeaderStyle = iter.GetCurrent().HeaderStyle();
 
-            Paragraph p = iter.Next();
+            ParagraphIter p = iter.Next();
             while( p != null && p.HeaderStyle() != currHeaderStyle )
             {
-                while( )
+                Content c = p.Next();
+                while( c != null )
                 {
-                    Content content;
-                    section.AddContent(content);
+                    section.AddContent(c);
                 }
                 p = iter.Next();
             }
@@ -93,19 +93,19 @@ namespace WordParser
         {
 
         }
-        public Paragraph SeekTitle()
+        public ParagraphIter SeekTitle()
         {
             return null;
         }
-        public Paragraph First()
+        public ParagraphIter First()
         {
             return null;
         }
-        public Paragraph Next()
+        public ParagraphIter Next()
         {
             return null;
         }
-        public Paragraph GetCurrent()
+        public ParagraphIter GetCurrent()
         {
             return null;
         }
@@ -113,11 +113,16 @@ namespace WordParser
         private int m_index = 0; // paragraph index
     }
     
-    class Paragraph
+    class ParagraphIter
     {
-        public Paragraph( int index /* TODO: pass in Word App*/)
+        public ParagraphIter( int index /* TODO: pass in Word App*/)
         {
             m_index = index;
+        }
+
+        public Content Next()
+        {
+            return null;
         }
 
         public int HeaderStyle()
