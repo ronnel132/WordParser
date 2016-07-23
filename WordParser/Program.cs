@@ -80,11 +80,12 @@ namespace WordParser
 
             int currHeaderStyle = iter.GetCurrent().HeaderStyle();
 
+            int paragraphCountWithinSection = 0;
             ParagraphIter p = iter.Next();
-            int paragraphCountWithinSection = 1;
 
             while (p != null && p.HeaderStyle() <= currHeaderStyle)
             {
+                paragraphCountWithinSection++;
                 if( p.IsHeaderSection && !fCollapse )
                 {
                     CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, depth + 1);
@@ -100,7 +101,6 @@ namespace WordParser
                 }
 
                 p = iter.Next();
-                paragraphCountWithinSection++;
             }
 
             return section;
