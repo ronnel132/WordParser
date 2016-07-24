@@ -9,7 +9,7 @@ using Microsoft.Office.Interop.Word;
 
 namespace WordParser
 {
-    class Program
+    public class Program
     {
         static void Main(string[] args)
         {
@@ -20,34 +20,32 @@ namespace WordParser
             Console.ReadLine();
             */
 
-            Application word = new Application();
-            Document doc = new Document();
+            // TODO: get the input file name from the command line
+            string docPath = @"\\ppt-svc\user\ansanch\DiffMonster Whitepaper.docx";
 
             ParserSettings settings = new ParserSettings()
             {
-                DocPath = @"C:\Users\ronnel\Documents\docwithpictures.docx",
-                ExtractPath = @"C:\Users\ronnel\Documents\docwithpictures_unzpd",
+                DocPath = docPath,
+                ExtractPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(docPath)),
                 OutputPath = @"\\ppt-svc\user\ansanch\Hackathon\rawoutput.xml",
-                WordDoc = doc,
                 HeaderDepth = 2
             };
 
             Parser parser = new Parser(settings);
             parser.Run();
-            parser.WriteToXml();
+            //parser.WriteToXml();
         }
     }
 
-    class ParserSettings
+    public class ParserSettings
     {
         public int HeaderDepth { get; set; }
         public string ExtractPath { get; set; }
         public string DocPath { get; set; }
         public string OutputPath { get; set; }
-        public Document WordDoc { get; set; }
     }
 
-    class Parser
+    public class Parser
     {
         public Parser(ParserSettings settings)
         {
@@ -57,13 +55,36 @@ namespace WordParser
         public void Run()
         {
             PictureUtils.UnzipWordDocument(m_settings.DocPath, m_settings.ExtractPath);
-            // Seek to document title, call CreateHeaderSection( title, 0, 0 );
-            DocumentIter iter = new DocumentIter(m_settings.WordDoc);
-            ParagraphIter titleParagraph = iter.SeekTitle();
 
-            var title = titleParagraph.GetText();
+            // Define an object to pass to the API for missing parameters
+            object missing = System.Type.Missing;
+            object readOnly = true;
+            object docPath = m_settings.DocPath;
 
-            m_document = CreateHeaderSection(iter, title, 0, 0);
+            Application word = new Application();
+            word.Visible = true; // TODO: remove this for the demo
+            Document doc = word.Documents.Open(ref docPath,
+                    ref missing, ref readOnly, ref missing, ref missing,
+                    ref missing, ref missing, ref missing, ref missing,
+                    ref missing, ref missing, ref missing, ref missing,
+                    ref missing, ref missing, ref missing);
+
+            try
+            {
+                // Seek to document title, call CreateHeaderSection( title, 0, 0 );
+                DocumentIter iter = new DocumentIter(doc);
+                ParagraphIter titleParagraph = iter.SeekTitle();
+
+                var title = titleParagraph.GetText();
+
+                m_document = CreateHeaderSection(iter, title, 0, 0);
+            }
+            finally
+            {
+                // close the document and msword
+                ((Microsoft.Office.Interop.Word._Document)doc).Close();
+                ((Microsoft.Office.Interop.Word._Application)word).Quit();
+            }
         }
 
         public void WriteOutputFile(string xmlPath)
@@ -76,7 +97,8 @@ namespace WordParser
         {
             // TODO: serialize as we parse
             bool fCollapse = depth >= m_settings.HeaderDepth;
-            HeaderSection section = new HeaderSection(header, start);
+
+            HeaderSection section = new HeaderSection(header, iter.CurrentCharPosition, start);
 
             int currHeaderStyle = iter.GetCurrent().HeaderStyle();
 
@@ -85,17 +107,18 @@ namespace WordParser
 
             while (p != null && p.HeaderStyle() <= currHeaderStyle)
             {
-                if( p.IsHeaderSection && !fCollapse )
+                if (p.IsHeaderSection(m_settings.HeaderDepth) && !fCollapse)
                 {
-                    CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, m_settings.HeaderDepth);
+                    Content c = CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, m_settings.HeaderDepth);
+                    section.AddContent(c);
                 }
                 else
                 {
-                    Content c = p.Next(paragraphCountWithinSection);
+                    Content c = p.Next(/*paragraphCountWithinSection //got confused with this so I removed it for now*/);
                     while (c != null)
                     {
                         section.AddContent(c);
-                        c = p.Next(paragraphCountWithinSection);
+                        c = p.Next(/*paragraphCountWithinSection*/);
                     }
                 }
 
@@ -111,93 +134,170 @@ namespace WordParser
 
     }
 
-    class DocumentIter
+    public class DocumentIter
     {
         public DocumentIter(Document doc)
         {
-
+            m_document = doc;
+            this.m_index = 0;
         }
         public ParagraphIter SeekTitle()
         {
+            for (m_index = 1; m_index < m_document.Paragraphs.Count; m_index++)
+            {
+                Style style = (Style)m_document.Paragraphs[m_index].get_Style();
+                if (style.NameLocal == "Title")
+                {
+                    ParagraphIter iter = new ParagraphIter(m_index, m_document);
+                    return iter;
+                }
+            }
 
-            return null;
+            // if no title found then return an iterator for the first paragraph
+            return new ParagraphIter(m_index, m_document);
         }
+
         public ParagraphIter First()
         {
             return null;
         }
+
         public ParagraphIter Next()
         {
-            return null;
+            m_index++;
+            return GetCurrent();
         }
         public ParagraphIter GetCurrent()
         {
-            return null;
+            return new ParagraphIter(m_index, m_document);
+        }
+
+        public long CurrentCharPosition
+        {
+            get
+            {
+                // TODO: ansanch - hardcoded to 1 for now
+                return 1;
+            }
         }
 
         private int m_index = 0; // paragraph index
+        private Document m_document;
     }
 
-    class ParagraphIter
+    public class ParagraphIter
     {
-        public ParagraphIter(int index /* TODO: pass in Word App*/)
+        public ParagraphIter(int index, Document wordDoc)
         {
             m_index = index;
+            m_document = wordDoc;
+
+            var contents = new List<Content>();
+            contents.Add(new Text(1, m_document.Paragraphs[m_index].Range.Text));
+
+            // determine if this paragraph contains anything other than text
+            // image -> wdInlineShapePicture, chart -> wdInlineShapeChart, diagram -> wdInlineShapeDiagram, smart art = wdInlineShapeSmartArt
+            // TODO: the Microsoft.Office.Interop.Word.WdInlineShapeType enum also lists a wdInlineShapeLinkedPicture, I have not tested it yet
+            int i = 0;
+            foreach (InlineShape shape in m_document.Paragraphs[m_index].Range.InlineShapes)
+            {
+                i++;
+
+                if (shape != null && shape.Type == Microsoft.Office.Interop.Word.WdInlineShapeType.wdInlineShapePicture)
+                {
+                    // TODO: ansanch - not sure if the start param on the picture constructor is supposed to be the 
+                    // index of the picture in the InlineShapes collection, if not then this needs to be fixed
+                    Picture pic = new Picture(i, 1, "TODO: implement the mapping to the extracted files");
+                    contents.Add(pic);
+                }
+            }
+
+
         }
 
-        public Content Next(int paragraphCount)
+        /// <summary>
+        /// Moves the iterator onto the next Content object within this paragraph i.e. Text, Image, Chart, etc.
+        /// </summary>
+        /// <returns>null when there is no more content in the paragraph</returns>
+        public Content Next(/* int paragraphCount - not sure we need a paragraphcount here */)
         {
-            return null;
+            return new Text(1, m_document.Paragraphs[m_index].Range.Text);
+
         }
 
         /// <summary>
         /// </summary>
-
         /// <returns>3 == title, 2 == header1, 1 == header2, 0 == not header / else</returns>
         public int HeaderStyle()
         {
-            return -1;
+            string styleName = ((Style)m_document.Paragraphs[m_index].get_Style()).NameLocal;
+
+            switch (styleName)
+            {
+                case "Title": return 3;
+                case "Header 1": return 2;
+                case "Header 2": return 1;
+                default: return 0;
+            }
         }
 
         public int WordCount()
         {
-            return 0;
+            return m_document.Paragraphs[m_index].Range.Words.Count;
         }
 
-        // Returns how many words into the paragraph each image in this paragraph is
-        public List<int> ImageLocations()
-        {
-            return new List<int>();
-        }
+        //// Returns how many words into the paragraph each image in this paragraph is
+        //public List<int> ImageLocations()
+        //{
+        //    return new List<int>();
+        //}
 
         public string GetText()
         {
-            return null;
+            return m_document.Paragraphs[m_index].Range.Text;
         }
 
-        public bool IsHeaderSection
+        public bool IsHeaderSection(int maxDepth)
         {
-            get
+            Style style = (Style)m_document.Paragraphs[m_index].get_Style();
+
+            var headerSectionStyles = new List<string>();
+            headerSectionStyles.Add("Title");
+            for (int i = 1; i <= maxDepth; i++)
+                headerSectionStyles.Add(string.Format("Heading {0}", i));
+
+            if (headerSectionStyles.Contains(style.NameLocal))
             {
-                return false; // TODO: Not implemented yet
+                return true;
             }
+
+            return false;
         }
 
         private int m_index;
+        private Document m_document;
     }
 
-    class Content
+    public class Content
     {
-        protected HeaderSection m_section { get; set; }
+        public Content(long charPosition)
+        {
+            this.CharPosition = CharPosition;
+        }
+
+        // TODO: ansanch - do we actually need this?
+        //public HeaderSection m_section { get; set; }
+
+        public long CharPosition { get; set; }
 
         protected int m_start; // How many lines into the containing HeaderSection we are
     }
 
-    class HeaderSection : Content
+    public class HeaderSection : Content
     {
         public static int globalId = 0;
 
-        public HeaderSection(string header, int start)
+        public HeaderSection(string header, long charPosition, int start) : base(charPosition)
         {
             m_header = header;
             m_start = start;
@@ -218,11 +318,11 @@ namespace WordParser
         private string m_header; // The actual title of the header itself
     }
 
-    class Picture : Content
+    public class Picture : Content
     {
         public static int globalId = 1;
 
-        public Picture(int start, string extractPath)
+        public Picture(int start, int charPosition, string extractPath) : base(charPosition)
         {
             m_start = start;
             m_id = Picture.generateId();
@@ -242,13 +342,20 @@ namespace WordParser
         private string m_path;
     }
 
-    class Text : Content
+    public class Text : Content
     {
+        public Text(long charPosition, string text) : base(charPosition)
+        {
+            m_text = text;
+        }
+
         private string m_text;
         private int m_count;
     }
 
-    class PictureUtils
+    #region utils
+
+    public class PictureUtils
     {
         public static List<string> GetDocumentPictures(string extractPath)
         {
@@ -291,4 +398,7 @@ namespace WordParser
             return "";
         }
     }
+
+    #endregion
+
 }

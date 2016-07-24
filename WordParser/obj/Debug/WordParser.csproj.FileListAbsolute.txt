@@ -7,3 +7,6 @@ c:\Users\ronnel\Documents\Visual Studio 2015\Projects\WordParser\WordParser\obj\
 C:\Users\ansanch\Documents\WordParser\WordParser\obj\Debug\WordParser.csprojResolveAssemblyReference.cache
 C:\Users\ansanch\Documents\WordParser\WordParser\obj\Debug\WordParser.exe
 C:\Users\ansanch\Documents\WordParser\WordParser\obj\Debug\WordParser.pdb
+C:\Users\ansanch\Documents\WordParser\WordParser\bin\Debug\WordParser.exe.config
+C:\Users\ansanch\Documents\WordParser\WordParser\bin\Debug\WordParser.exe
+C:\Users\ansanch\Documents\WordParser\WordParser\bin\Debug\WordParser.pdb
