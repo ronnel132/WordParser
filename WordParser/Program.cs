@@ -108,7 +108,7 @@ namespace WordParser
             int paragraphCountWithinSection = 0;
             ParagraphIter p = iter.Next();
 
-            while (p != null && p.HeaderStyle() <= currHeaderStyle)
+            while (p != null && p.HeaderStyle() < currHeaderStyle)
             {
                 paragraphCountWithinSection++;
 
@@ -125,9 +125,10 @@ namespace WordParser
                         section.AddContent(c);
                         c = p.Next(/*paragraphCountWithinSection*/);
                     }
+
+                    p = iter.Next();
                 }
 
-                p = iter.Next();
             }
 
             return section;
@@ -172,6 +173,7 @@ namespace WordParser
         public ParagraphIter Next()
         {
             m_index++;
+
             if (m_index <= m_settings.WordDocument.Paragraphs.Count)
                 return GetCurrent();
             else
@@ -249,8 +251,8 @@ namespace WordParser
             switch (styleName)
             {
                 case "Title": return 3;
-                case "Header 1": return 2;
-                case "Header 2": return 1;
+                case "Heading 1": return 2;
+                case "Heading 2": return 1;
                 default: return 0;
             }
         }
