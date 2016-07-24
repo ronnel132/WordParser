@@ -29,7 +29,7 @@ namespace WordParser
             ParserSettings settings = new ParserSettings()
             {
                 DocPath = docPath,
-                ExtractPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(docPath)),
+                ExtractPath = Path.Combine(Path.GetTempPath(), Path.GetFileNameWithoutExtension(docPath)),
                 OutputPath = outputPath,
                 HeaderDepth = 2
             };
@@ -119,20 +119,14 @@ namespace WordParser
                     Content c = CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, depth + 1);
                     section.AddContent(c);
                     p = iter.GetCurrent();
-                    /*
-                    if (!iter.FFinished())
-                        p = iter.GetCurrent();
-                    else
-                        p = iter.Next();
-                        */
                 }
                 else
                 {
-                    Content c = p.Next(/*paragraphCountWithinSection //got confused with this so I removed it for now*/);
+                    Content c = p.Next();
                     while (c != null)
                     {
                         section.AddContent(c);
-                        c = p.Next(/*paragraphCountWithinSection*/);
+                        c = p.Next();
                     }
                     p = iter.Next();
                 }
@@ -191,8 +185,9 @@ namespace WordParser
         {
             get
             {
-                // TODO: ansanch - hardcoded to 1 for now
-                return 1;
+                if (GetCurrent() != null)
+                    return GetCurrent().GetParagraphStartCharPosition();
+                return 0;
             }
         }
 
@@ -213,7 +208,8 @@ namespace WordParser
             m_document = settings.WordDocument;
 
             m_items = new List<Content>();
-            m_items.Add(new Text(1, m_document.Paragraphs[m_paragraphIndex].Range.Text));
+            int textStart = GetParagraphStartCharPosition();
+            m_items.Add(new Text(textStart, m_document.Paragraphs[m_paragraphIndex].Range.Text));
 
             // determine if this paragraph contains anything other than text
             // image -> wdInlineShapePicture, chart -> wdInlineShapeChart, diagram -> wdInlineShapeDiagram, smart art = wdInlineShapeSmartArt
@@ -227,12 +223,18 @@ namespace WordParser
                 {
                     // TODO: ansanch - not sure if the start param on the picture constructor is supposed to be the 
                     // index of the picture in the InlineShapes collection, if not then this needs to be fixed
-                    Picture pic = new Picture(i, 1, settings.ExtractPath);
+                    int start = shape.Range.Start;
+                    Picture pic = new Picture(i, start, settings.ExtractPath);
                     m_items.Add(pic);
                 }
             }
 
             m_contentIndex = 0;
+        }
+
+        public int GetParagraphStartCharPosition()
+        {
+            return m_document.Paragraphs[m_paragraphIndex].Range.Start;
         }
 
         /// <summary>
@@ -308,11 +310,8 @@ namespace WordParser
     {
         public Content(long charPosition)
         {
-            this.CharPosition = CharPosition;
+            this.CharPosition = charPosition;
         }
-
-        // TODO: ansanch - do we actually need this?
-        //public HeaderSection m_section { get; set; }
 
         public long CharPosition { get; set; }
 
