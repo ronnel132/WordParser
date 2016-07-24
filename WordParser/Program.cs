@@ -20,20 +20,21 @@ namespace WordParser
             Console.ReadLine();
             */
 
-            // TODO: get the input file name from the command line
+            // TODO: get the input and output paths from the command line
             string docPath = @"\\ppt-svc\user\ansanch\DiffMonster Whitepaper.docx";
+            string outputPath = @"\\ppt-svc\user\ansanch\Hackathon\rawoutput.xml";
 
             ParserSettings settings = new ParserSettings()
             {
                 DocPath = docPath,
                 ExtractPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(docPath)),
-                OutputPath = @"\\ppt-svc\user\ansanch\Hackathon\rawoutput.xml",
+                OutputPath = outputPath,
                 HeaderDepth = 2
             };
 
             Parser parser = new Parser(settings);
             parser.Run();
-            //parser.WriteToXml();
+            parser.WriteOutputFile(outputPath);
         }
     }
 
@@ -43,6 +44,7 @@ namespace WordParser
         public string ExtractPath { get; set; }
         public string DocPath { get; set; }
         public string OutputPath { get; set; }
+        public Document WordDocument { get; set; }
     }
 
     public class Parser
@@ -69,15 +71,17 @@ namespace WordParser
                     ref missing, ref missing, ref missing, ref missing,
                     ref missing, ref missing, ref missing);
 
+            m_settings.WordDocument = doc;
+
             try
             {
                 // Seek to document title, call CreateHeaderSection( title, 0, 0 );
-                DocumentIter iter = new DocumentIter(doc);
+                DocumentIter iter = new DocumentIter(m_settings);
                 ParagraphIter titleParagraph = iter.SeekTitle();
 
                 var title = titleParagraph.GetText();
 
-                m_document = CreateHeaderSection(iter, title, 0, 0);
+                m_mainHeaderSection = CreateHeaderSection(iter, title, 0, 0);
             }
             finally
             {
@@ -129,32 +133,35 @@ namespace WordParser
             return section;
         }
 
-        private HeaderSection m_document; // Header section containing all document content
+        private HeaderSection m_mainHeaderSection; // Header section containing all document content
         private ParserSettings m_settings;
 
     }
 
     public class DocumentIter
     {
-        public DocumentIter(Document doc)
+        public DocumentIter(ParserSettings settings)
         {
-            m_document = doc;
+            m_settings = settings;
             this.m_index = 0;
         }
+
         public ParagraphIter SeekTitle()
         {
-            for (m_index = 1; m_index < m_document.Paragraphs.Count; m_index++)
+            Document document = m_settings.WordDocument;
+
+            for (m_index = 1; m_index < document.Paragraphs.Count; m_index++)
             {
-                Style style = (Style)m_document.Paragraphs[m_index].get_Style();
+                Style style = (Style)document.Paragraphs[m_index].get_Style();
                 if (style.NameLocal == "Title")
                 {
-                    ParagraphIter iter = new ParagraphIter(m_index, m_document);
+                    ParagraphIter iter = new ParagraphIter(m_index, m_settings);
                     return iter;
                 }
             }
 
             // if no title found then return an iterator for the first paragraph
-            return new ParagraphIter(m_index, m_document);
+            return new ParagraphIter(m_index, m_settings);
         }
 
         public ParagraphIter First()
@@ -165,11 +172,14 @@ namespace WordParser
         public ParagraphIter Next()
         {
             m_index++;
-            return GetCurrent();
+            if (m_index <= m_settings.WordDocument.Paragraphs.Count)
+                return GetCurrent();
+            else
+                return null;
         }
         public ParagraphIter GetCurrent()
         {
-            return new ParagraphIter(m_index, m_document);
+            return new ParagraphIter(m_index, m_settings);
         }
 
         public long CurrentCharPosition
@@ -182,24 +192,24 @@ namespace WordParser
         }
 
         private int m_index = 0; // paragraph index
-        private Document m_document;
+        private ParserSettings m_settings;
     }
 
     public class ParagraphIter
     {
-        public ParagraphIter(int index, Document wordDoc)
+        public ParagraphIter(int index, ParserSettings settings)
         {
-            m_index = index;
-            m_document = wordDoc;
+            m_paragraphIndex = index;
+            m_document = settings.WordDocument;
 
-            var contents = new List<Content>();
-            contents.Add(new Text(1, m_document.Paragraphs[m_index].Range.Text));
+            m_items = new List<Content>();
+            m_items.Add(new Text(1, m_document.Paragraphs[m_paragraphIndex].Range.Text));
 
             // determine if this paragraph contains anything other than text
             // image -> wdInlineShapePicture, chart -> wdInlineShapeChart, diagram -> wdInlineShapeDiagram, smart art = wdInlineShapeSmartArt
-            // TODO: the Microsoft.Office.Interop.Word.WdInlineShapeType enum also lists a wdInlineShapeLinkedPicture, I have not tested it yet
+            // Note: the Microsoft.Office.Interop.Word.WdInlineShapeType enum also lists a wdInlineShapeLinkedPicture, we may need to support this eventually
             int i = 0;
-            foreach (InlineShape shape in m_document.Paragraphs[m_index].Range.InlineShapes)
+            foreach (InlineShape shape in m_document.Paragraphs[m_paragraphIndex].Range.InlineShapes)
             {
                 i++;
 
@@ -207,21 +217,26 @@ namespace WordParser
                 {
                     // TODO: ansanch - not sure if the start param on the picture constructor is supposed to be the 
                     // index of the picture in the InlineShapes collection, if not then this needs to be fixed
-                    Picture pic = new Picture(i, 1, "TODO: implement the mapping to the extracted files");
-                    contents.Add(pic);
+                    Picture pic = new Picture(i, 1, settings.ExtractPath);
+                    m_items.Add(pic);
                 }
             }
 
+            m_contentIndex = 0;
         }
 
         /// <summary>
         /// Moves the iterator onto the next Content object within this paragraph i.e. Text, Image, Chart, etc.
         /// </summary>
         /// <returns>null when there is no more content in the paragraph</returns>
-        public Content Next(/* int paragraphCount - not sure we need a paragraphcount here */)
+        public Content Next(/* int paragraphCount - TODO: not sure if we need paragraphCount here */)
         {
-            return new Text(1, m_document.Paragraphs[m_index].Range.Text);
+            if (m_contentIndex < m_items.Count)
+            {
+                return m_items[m_contentIndex++];
+            }
 
+            return null;
         }
 
         /// <summary>
@@ -229,7 +244,7 @@ namespace WordParser
         /// <returns>3 == title, 2 == header1, 1 == header2, 0 == not header / else</returns>
         public int HeaderStyle()
         {
-            string styleName = ((Style)m_document.Paragraphs[m_index].get_Style()).NameLocal;
+            string styleName = ((Style)m_document.Paragraphs[m_paragraphIndex].get_Style()).NameLocal;
 
             switch (styleName)
             {
@@ -242,7 +257,7 @@ namespace WordParser
 
         public int WordCount()
         {
-            return m_document.Paragraphs[m_index].Range.Words.Count;
+            return m_document.Paragraphs[m_paragraphIndex].Range.Words.Count;
         }
 
         //// Returns how many words into the paragraph each image in this paragraph is
@@ -253,12 +268,12 @@ namespace WordParser
 
         public string GetText()
         {
-            return m_document.Paragraphs[m_index].Range.Text;
+            return m_document.Paragraphs[m_paragraphIndex].Range.Text;
         }
 
         public bool IsHeaderSection(int maxDepth)
         {
-            Style style = (Style)m_document.Paragraphs[m_index].get_Style();
+            Style style = (Style)m_document.Paragraphs[m_paragraphIndex].get_Style();
 
             var headerSectionStyles = new List<string>();
             headerSectionStyles.Add("Title");
@@ -273,8 +288,10 @@ namespace WordParser
             return false;
         }
 
-        private int m_index;
+        private int m_paragraphIndex;
+        private int m_contentIndex;
         private Document m_document;
+        private List<Content> m_items;
     }
 
     public class Content
