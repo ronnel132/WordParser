@@ -118,8 +118,13 @@ namespace WordParser
                 {
                     Content c = CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, depth + 1);
                     section.AddContent(c);
+                    p = iter.GetCurrent();
+                    /*
                     if (!iter.FFinished())
                         p = iter.GetCurrent();
+                    else
+                        p = iter.Next();
+                        */
                 }
                 else
                 {
@@ -129,8 +134,8 @@ namespace WordParser
                         section.AddContent(c);
                         c = p.Next(/*paragraphCountWithinSection*/);
                     }
+                    p = iter.Next();
                 }
-                p = iter.Next();
             }
 
             return section;
@@ -175,15 +180,11 @@ namespace WordParser
         public ParagraphIter Next()
         {
             m_index++;
-
-            if(!FFinished())
-                return GetCurrent();
-            else
-                return null;
+            return GetCurrent();
         }
         public ParagraphIter GetCurrent()
         {
-            return new ParagraphIter(m_index, m_settings);
+            return this.FFinished() ? null : new ParagraphIter(m_index, m_settings);
         }
 
         public long CurrentCharPosition
