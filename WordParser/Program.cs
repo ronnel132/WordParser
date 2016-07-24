@@ -21,8 +21,10 @@ namespace WordParser
             */
 
             // TODO: get the input and output paths from the command line
-            string docPath = @"\\ppt-svc\user\ansanch\DiffMonster Whitepaper.docx";
-            string outputPath = @"\\ppt-svc\user\ansanch\Hackathon\rawoutput.xml";
+            string docPath = @"C:\Users\ronnel\Downloads\DiffMonsterWhitepaper.docx";
+            string outputPath = @"C:\Users\ronnel\Documents\rawoutput.xml";
+            //string docPath = @"\\ppt-svc\user\ansanch\DiffMonster Whitepaper.docx";
+            //string outputPath = @"\\ppt-svc\user\ansanch\Hackathon\rawoutput.xml";
 
             ParserSettings settings = new ParserSettings()
             {
@@ -116,6 +118,8 @@ namespace WordParser
                 {
                     Content c = CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, depth + 1);
                     section.AddContent(c);
+                    if (!iter.FFinished())
+                        p = iter.GetCurrent();
                 }
                 else
                 {
@@ -125,10 +129,8 @@ namespace WordParser
                         section.AddContent(c);
                         c = p.Next(/*paragraphCountWithinSection*/);
                     }
-
-                    p = iter.Next();
                 }
-
+                p = iter.Next();
             }
 
             return section;
@@ -174,7 +176,7 @@ namespace WordParser
         {
             m_index++;
 
-            if (m_index <= m_settings.WordDocument.Paragraphs.Count)
+            if(!FFinished())
                 return GetCurrent();
             else
                 return null;
@@ -191,6 +193,11 @@ namespace WordParser
                 // TODO: ansanch - hardcoded to 1 for now
                 return 1;
             }
+        }
+
+        public bool FFinished()
+        {
+            return m_index > m_settings.WordDocument.Paragraphs.Count;
         }
 
         private int m_index = 0; // paragraph index
