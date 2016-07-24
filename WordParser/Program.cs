@@ -97,19 +97,20 @@ namespace WordParser
         {
             // TODO: serialize as we parse
             bool fCollapse = depth >= m_settings.HeaderDepth;
-
             HeaderSection section = new HeaderSection(header, iter.CurrentCharPosition, start);
 
             int currHeaderStyle = iter.GetCurrent().HeaderStyle();
 
+            int paragraphCountWithinSection = 0;
             ParagraphIter p = iter.Next();
-            int paragraphCountWithinSection = 1;
 
             while (p != null && p.HeaderStyle() <= currHeaderStyle)
             {
+                paragraphCountWithinSection++;
+
                 if (p.IsHeaderSection(m_settings.HeaderDepth) && !fCollapse)
                 {
-                    Content c = CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, m_settings.HeaderDepth);
+                    Content c = CreateHeaderSection(iter, p.GetText(), paragraphCountWithinSection, depth + 1);
                     section.AddContent(c);
                 }
                 else
@@ -123,7 +124,6 @@ namespace WordParser
                 }
 
                 p = iter.Next();
-                paragraphCountWithinSection++;
             }
 
             return section;
@@ -211,7 +211,6 @@ namespace WordParser
                     contents.Add(pic);
                 }
             }
-
 
         }
 
