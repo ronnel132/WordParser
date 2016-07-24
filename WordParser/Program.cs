@@ -160,9 +160,7 @@ namespace WordParser
             string slideTitle = m_doc.GetHeader();
             slideLst.Add(new Slide(slideTitle, null, null)); /* TODO: add image for first slide */
 
-            bool fNewSlideForHeader1s = m_maxDepth > 1;
-
-            ConstructSection(m_doc, fNewSlideForHeader1s);
+            ConstructSection(m_doc, 1);
         }
 
         public void WriteToOutputfile( string xmlPath)
@@ -170,39 +168,45 @@ namespace WordParser
 
         }
 
-        private List<Slide> ConstructSection(HeaderSection section, bool fCreateSectionStartSlides)
+        private List<Slide> ConstructSection(HeaderSection section, int depth)
         {
             List<Slide> slideLst = new List<Slide>();
             List<Content> docContent = m_doc.GetContent();
+            string setionHeader = section.GetHeader();
             foreach( Content c in docContent )
             {
                 if(c.GetType().Equals(typeof(HeaderSection)))
                 {
                     HeaderSection subSection = (HeaderSection)c;
-                    Slide sectionStartSlide = new Slide(section.GetHeader(), null, null); /* TODO: add images for section start slides */
+                    Slide sectionStartSlide = new Slide(subSection.GetHeader(), null, null); /* TODO: add images for section start slides */
                     slideLst.Add(sectionStartSlide);
 
-                    if (fCreateSectionStartSlides)
+                    if (depth < 2)
                     {
-                        List<Slide> subSlides = ConstructSection(subSection, false);
+                        List<Slide> subSlides = ConstructSection(subSection, depth + 1);
                         slideLst.AddRange(subSlides);
+                    }
+                    else if( depth == 2)
+                    {
+                        Slide sectionSlide = ConstructSlideForSection(subSection);
                     }
                 }
                 else if(c.GetType().Equals(typeof(Text)))
                 {
-
+                   /* TODO */
                 }
                 else if(c.GetType().Equals(typeof(Picture)))
                 {
-
+                   /* TODO */
                 }
             }
             return null;
         } 
 
-        private List<Slide> ConstructSlidesFromHeaderSection( HeaderSection section )
+        /* Construct slide for header 2 section */
+        // TODO: Create a list of slides if needed
+        private List<Slide> ConstructSlideForSection( HeaderSection section )
         {
-            throw new NotImplementedException();
         }
 
         private HeaderSection m_doc;
