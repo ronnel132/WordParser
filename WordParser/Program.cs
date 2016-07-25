@@ -258,11 +258,11 @@ namespace WordParser
                 foreach( Slide slide in sldList )
                 {
                     int slideChars = slide.GetCharCount();
-                    charCount += slideChars;
-                    if( charCount  <= charPos && charPos <= charCount + slideChars )
+                    if( charCount <= charPos && charPos <= charCount + slideChars )
                     {
                         slide.ImagePaths.Add(pic.GetImagePath());
                     }
+                    charCount += slideChars;
                 }
 
             }
