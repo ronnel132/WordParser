@@ -20,11 +20,10 @@ namespace WordParser
             Console.ReadLine();
             */
 
-            // TODO: get the input and output paths from the command line
-            string docPath = @"C:\Users\ronnel\Downloads\DiffMonsterWhitepaper.docx";
-            string outputPath = @"C:\Users\ronnel\Documents\rawoutput.xml";
-            //string docPath = @"\\ppt-svc\user\ansanch\DiffMonster Whitepaper.docx";
-            //string outputPath = @"\\ppt-svc\user\ansanch\Hackathon\rawoutput.xml";
+            // When running from Visual Studio (F5) set the command line parameters on the project settings dialog (right click -> properties), debug tab, Startup options -> Command Line Args
+            string docPath = args[0];
+            string outputPath = args[1];
+            
 
             ParserSettings settings = new ParserSettings()
             {
@@ -529,6 +528,11 @@ namespace WordParser
             return false;
         }
 
+        public override string ToString()
+        {
+            return string.Format("HeaderSection: {0}", m_header);
+        }
+
         private int m_id; // A unique ID for the header
         private List<Content> m_contents; // The list of objects contained in this header
         private string m_header; // The actual title of the header itself
@@ -559,6 +563,11 @@ namespace WordParser
             return m_path;
         }
 
+        public override string ToString()
+        {
+            return string.Format("Picture: {0}", Path.GetFileName(m_path));
+        }
+
         private int m_id; // Global id iterated from 1. ID = i maps to a file image_i.jpg in the word document
         private string m_path;
     }
@@ -584,6 +593,11 @@ namespace WordParser
         public string GetSummarizedText()
         {
             throw new NotImplementedException();
+        }
+
+        public override string ToString()
+        {
+            return string.Format("Text: {0}", m_text);
         }
 
         private string m_text;
