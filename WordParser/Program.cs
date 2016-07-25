@@ -85,7 +85,7 @@ namespace WordParser
 
                 m_mainHeaderSection = CreateHeaderSection(iter, title, 0, 0);
 
-                m_presentation = new Presentation(m_mainHeaderSection, m_maxDepthEncountered);
+                m_presentation = new Presentation(m_mainHeaderSection, m_settings.HeaderDepth);
             }
             finally
             {
@@ -178,18 +178,22 @@ namespace WordParser
                 if(c.GetType().Equals(typeof(HeaderSection)))
                 {
                     HeaderSection subSection = (HeaderSection)c;
-                    Slide sectionStartSlide = new Slide(subSection.GetHeader(), null, null); /* TODO: add images for section start slides */
-                    slideLst.Add(sectionStartSlide);
 
-                    if (depth < 2)
+                    List<Slide> subSlides;
+                    if (depth < m_maxDepth)
                     {
-                        List<Slide> subSlides = ConstructSection(subSection, depth + 1);
-                        slideLst.AddRange(subSlides);
+                        /* Create the section start slide */
+                        Slide sectionStartSlide = new Slide(subSection.GetHeader(), null, null); /* TODO: add images for section start slides */
+                        slideLst.Add(sectionStartSlide);
+
+                        /* Recursively construct content inside this header section */
+                        subSlides = ConstructSection(subSection, depth + 1);
                     }
-                    else if( depth == 2)
+                    else
                     {
-                        Slide sectionSlide = ConstructSlideForSection(subSection);
+                        subSlides = ConstructSlidesForSection(subSection);
                     }
+                    slideLst.AddRange(subSlides);
                 }
                 else if(c.GetType().Equals(typeof(Text)))
                 {
@@ -200,13 +204,20 @@ namespace WordParser
                    /* TODO */
                 }
             }
-            return null;
+            return slideLst;
         } 
 
-        /* Construct slide for header 2 section */
+        /* Construct for section *only* containing text and pictures */
         // TODO: Create a list of slides if needed
-        private List<Slide> ConstructSlideForSection( HeaderSection section )
+        private List<Slide> ConstructSlidesForSection( HeaderSection section )
         {
+            List<Content> docContent = m_doc.GetContent();
+            string setionHeader = section.GetHeader();
+            foreach( Content c in docContent )
+            {
+
+            }
+            return null;
         }
 
         private HeaderSection m_doc;
