@@ -31,7 +31,8 @@ namespace WordParser
                 DocPath = docPath,
                 ExtractPath = Path.Combine(Path.GetTempPath(), Path.GetFileNameWithoutExtension(docPath)),
                 OutputPath = outputPath,
-                HeaderDepth = 2
+                HeaderDepth = 2,
+                MaxCharsPerSlide = 1000
             };
 
             Parser parser = new Parser(settings);
@@ -47,6 +48,7 @@ namespace WordParser
         public string DocPath { get; set; }
         public string OutputPath { get; set; }
         public Document WordDocument { get; set; }
+        public int MaxCharsPerSlide { get; set; }
     }
 
     public class Parser
@@ -82,10 +84,9 @@ namespace WordParser
                 ParagraphIter titleParagraph = iter.SeekTitle();
 
                 var title = titleParagraph.GetText();
-
                 m_mainHeaderSection = CreateHeaderSection(iter, title, 0, 0);
 
-                m_presentation = new Presentation(m_mainHeaderSection, m_settings.HeaderDepth);
+                m_presentation = new Presentation(m_mainHeaderSection, m_settings.HeaderDepth, m_settings);
             }
             finally
             {
@@ -104,8 +105,6 @@ namespace WordParser
         // Main recursive loop
         private HeaderSection CreateHeaderSection(DocumentIter iter, string header, int start, int depth)
         {
-            if (depth > m_maxDepthEncountered)
-                m_maxDepthEncountered = depth;
             // TODO: serialize as we parse
             bool fCollapse = depth >= m_settings.HeaderDepth;
             HeaderSection section = new HeaderSection(header, iter.CurrentCharPosition, start);
@@ -142,16 +141,16 @@ namespace WordParser
 
         private HeaderSection m_mainHeaderSection; // Header section containing all document content
         private ParserSettings m_settings;
-        private int m_maxDepthEncountered = -1;
         private Presentation m_presentation;
     }
 
     public class Presentation
     {
-        public Presentation( HeaderSection document, int maxDepth )
+        public Presentation( HeaderSection document, int maxDepth, ParserSettings settings )
         {
             m_doc = document;
             m_maxDepth = maxDepth;
+            m_settings = settings;
         }
 
         public void Construct()
@@ -159,20 +158,20 @@ namespace WordParser
             List<Slide> slideLst = new List<Slide>();
             string slideTitle = m_doc.GetHeader();
             slideLst.Add(new Slide(slideTitle, null, null)); /* TODO: add image for first slide */
-
-            ConstructSection(m_doc, 1);
+            slideLst.AddRange(ConstructSection(m_doc));
+            m_slides = slideLst;
         }
 
         public void WriteToOutputfile( string xmlPath)
         {
-
+            // TODO
         }
 
-        private List<Slide> ConstructSection(HeaderSection section, int depth)
+        private List<Slide> ConstructSection(HeaderSection section)
         {
             List<Slide> slideLst = new List<Slide>();
-            List<Content> docContent = m_doc.GetContent();
-            string setionHeader = section.GetHeader();
+            List<Content> docContent = section.GetContent();
+            string sectionHeader = section.GetHeader();
             foreach( Content c in docContent )
             {
                 if(c.GetType().Equals(typeof(HeaderSection)))
@@ -180,14 +179,14 @@ namespace WordParser
                     HeaderSection subSection = (HeaderSection)c;
 
                     List<Slide> subSlides;
-                    if (depth < m_maxDepth)
+                    if(subSection.FContainsHeaderSections())
                     {
                         /* Create the section start slide */
                         Slide sectionStartSlide = new Slide(subSection.GetHeader(), null, null); /* TODO: add images for section start slides */
                         slideLst.Add(sectionStartSlide);
 
                         /* Recursively construct content inside this header section */
-                        subSlides = ConstructSection(subSection, depth + 1);
+                        subSlides = ConstructSection(subSection);
                     }
                     else
                     {
@@ -208,33 +207,108 @@ namespace WordParser
         } 
 
         /* Construct for section *only* containing text and pictures */
-        // TODO: Create a list of slides if needed
         private List<Slide> ConstructSlidesForSection( HeaderSection section )
         {
-            List<Content> docContent = m_doc.GetContent();
-            string setionHeader = section.GetHeader();
+            List<Slide> sldList = new List<Slide>();
+
+            List<Content> docContent = section.GetContent();
+            string sectionHeader = section.GetHeader();
+            List<Picture> pictureList = new List<Picture>();
+
+            int slideCharCount  = 0;
+
+            Slide curSlide = new Slide();
+            curSlide.Title = sectionHeader;
             foreach( Content c in docContent )
             {
+                if( slideCharCount >= m_settings.MaxCharsPerSlide)
+                {
+                    sldList.Add(curSlide);
+                    curSlide = new Slide();
+                    curSlide.Title = sectionHeader;
+                    slideCharCount = 0;
+                }
+                if(c.GetType().Equals(typeof(Text)))
+                {
+                    Text text = (Text)c;
+                    string prettified = text.GetPrettifiedText();
+                    if (!String.IsNullOrEmpty(prettified))
+                    {
+                        slideCharCount += prettified.Length;
+                        // TODO: call "GetSummarizedText"
+                        curSlide.SlideText.Add(prettified);
+                    }
+                }
+                else if(c.GetType().Equals(typeof(Picture)))
+                {
+                    // Add to a picture list to store in the correct slide below 
+                    Picture picture = (Picture)c;
+                    pictureList.Add(picture);
+                }
+            }
+
+            if (!sldList.Contains(curSlide))
+                sldList.Add(curSlide);
+
+            // Place the image in the correct slade based on it's char position
+            int charCount = (int) section.CharPosition;
+            foreach( Picture pic in pictureList)
+            {
+                long charPos = pic.CharPosition;
+                foreach( Slide slide in sldList )
+                {
+                    int slideChars = slide.GetCharCount();
+                    charCount += slideChars;
+                    if( charCount  <= charPos && charPos <= charCount + slideChars )
+                    {
+                        slide.ImagePaths.Add(pic.GetImagePath());
+                    }
+                }
 
             }
-            return null;
+
+            return sldList;
         }
 
+        private List<Slide> m_slides;
         private HeaderSection m_doc;
         private int m_maxDepth;
+        private ParserSettings m_settings;
     }
 
     public class Slide
     {
-        public Slide(string title, List<string> slideContent, List<string> imagePaths)
+        public Slide()
         {
+            SlideText = new List<string>();
+            ImagePaths = new List<string>();
+        }
 
+        public Slide(string title, List<string> slideText, List<string> imagePaths)
+        {
+            Title = title;
+            SlideText = slideText;
+            ImagePaths = imagePaths;
+        }
+
+        public int GetCharCount()
+        {
+            int count = 0;
+            foreach( string text in SlideText )
+            {
+                count += text.Length;
+            }
+            return count;
         }
 
         public string ConstructSlideString()
         {
             throw new NotImplementedException();
         }
+
+        public string Title { get; set; }
+        public List<string> SlideText { get; set; }
+        public List<string> ImagePaths { get; set; }
     }
 
     public class DocumentIter
@@ -437,12 +511,22 @@ namespace WordParser
 
         public string GetHeader()
         {
-            return m_header;
+            return m_header.Trim(new char[] { '\r', '\n', '/', '\a' });
         }
 
         public List<Content> GetContent()
         {
             return m_contents;
+        }
+
+        public bool FContainsHeaderSections()
+        {
+            foreach( Content c in m_contents)
+            {
+                if (c.GetType().Equals(typeof(HeaderSection)))
+                    return true;
+            }
+            return false;
         }
 
         private int m_id; // A unique ID for the header
@@ -470,6 +554,11 @@ namespace WordParser
             return globalId++;
         }
 
+        public string GetImagePath()
+        {
+            return m_path;
+        }
+
         private int m_id; // Global id iterated from 1. ID = i maps to a file image_i.jpg in the word document
         private string m_path;
     }
@@ -479,6 +568,22 @@ namespace WordParser
         public Text(long charPosition, string text) : base(charPosition)
         {
             m_text = text;
+        }
+
+        public string GetText()
+        {
+            return m_text;
+        }
+
+        // Remove newlines, forward slashes, 
+        public string GetPrettifiedText()
+        {
+            return m_text.Trim(new char[] { '\r', '\n', '/' });
+        }
+
+        public string GetSummarizedText()
+        {
+            throw new NotImplementedException();
         }
 
         private string m_text;
